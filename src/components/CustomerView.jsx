@@ -28,6 +28,12 @@ export default function CustomerView() {
       .catch(err => console.error("Error fetching shops:", err));
   }, []);
 
+  const handleLogout = () => {
+    setToken(null);
+    setSelectedShop(null);
+    alert("Logged out successfully!");
+  };
+
   const handleShopSelect = (shop) => {
     setSelectedShop(shop);
     setSelectedService(null);
@@ -37,14 +43,12 @@ export default function CustomerView() {
     socket.emit('joinShopRoom', shop._id);
   };
 
-  // --- REAL AUTHENTICATION FUNCTION ---
   const handleAuth = async (e) => {
-    e.preventDefault(); // Prevent page refresh
-    
+    e.preventDefault();
     const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
     const payload = isLoginMode 
       ? { phone, password } 
-      : { name, phone, password, role: "customer", email: `${phone}@placeholder.com` }; // Fallback email if DB requires it
+      : { name, phone, password, role: "customer", email: `${phone}@placeholder.com` };
 
     try {
       const res = await fetch(`${API_URL}${endpoint}`, {
@@ -88,25 +92,28 @@ export default function CustomerView() {
 
   return (
     <div className="max-w-md mx-auto bg-gray-50 min-h-screen p-4 font-sans">
-      <Link to="/" className="text-blue-600 text-sm font-semibold mb-4 inline-block">&larr; Back to Home</Link>
+      <div className="flex justify-between items-center mb-4">
+        <Link to="/" className="text-blue-600 text-sm font-semibold">&larr; Back to Home</Link>
+        {token && (
+          <button onClick={handleLogout} className="text-red-500 text-sm font-bold border border-red-200 px-3 py-1 rounded hover:bg-red-50">
+            Logout
+          </button>
+        )}
+      </div>
       
-      {/* --- REAL LOGIN/REGISTER FORM --- */}
       {!token && (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-gray-200">
           <h2 className="text-2xl font-bold mb-4 text-center">{isLoginMode ? 'Customer Login' : 'Create Account'}</h2>
-          
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             {!isLoginMode && (
               <input type="text" placeholder="Full Name" required className="border p-3 rounded" value={name} onChange={e => setName(e.target.value)} />
             )}
             <input type="tel" placeholder="Phone Number" required className="border p-3 rounded" value={phone} onChange={e => setPhone(e.target.value)} />
             <input type="password" placeholder="Password" required className="border p-3 rounded" value={password} onChange={e => setPassword(e.target.value)} />
-            
             <button type="submit" className="bg-black text-white font-bold py-3 rounded-lg hover:bg-gray-800 transition-colors">
               {isLoginMode ? 'Secure Login' : 'Sign Up'}
             </button>
           </form>
-
           <p className="mt-4 text-sm text-center text-gray-600">
             {isLoginMode ? "Don't have an account? " : "Already have an account? "}
             <span className="text-blue-600 cursor-pointer font-bold hover:underline" onClick={() => setIsLoginMode(!isLoginMode)}>
@@ -116,7 +123,6 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* --- REST OF THE APP (ONLY SHOWS IF LOGGED IN) --- */}
       {token && (
         <>
           <header className="mb-6 text-center">
@@ -142,7 +148,6 @@ export default function CustomerView() {
             <div>
               <button onClick={() => setSelectedShop(null)} className="text-blue-600 text-sm font-semibold mb-4">&larr; Back to Shops</button>
               <h2 className="text-xl font-bold mb-4">{selectedShop.name}</h2>
-
               <h3 className="text-md font-semibold mb-2">1. Select Service</h3>
               <div className="grid gap-2 mb-6">
                 {services.map(service => (
@@ -152,7 +157,6 @@ export default function CustomerView() {
                   </div>
                 ))}
               </div>
-
               {selectedService && (
                 <div className="mb-6">
                   <h3 className="text-md font-semibold mb-2">2. Pick a Time Today</h3>
@@ -165,7 +169,6 @@ export default function CustomerView() {
                   </div>
                 </div>
               )}
-
               {selectedSlot && (
                 <button onClick={handleBooking} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 shadow-lg">
                   Pay ₹50 Advance & Confirm

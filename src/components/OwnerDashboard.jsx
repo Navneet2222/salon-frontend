@@ -6,14 +6,12 @@ const API_URL = 'https://salon-backend-hlzb.onrender.com/api';
 const socket = io('https://salon-backend-hlzb.onrender.com');
 
 export default function OwnerDashboard() {
-  // --- AUTHENTICATION STATE ---
   const [token, setToken] = useState(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // --- SHOP & QUEUE STATE ---
   const [myShop, setMyShop] = useState(null);
   const [queue, setQueue] = useState([]);
   const [shopName, setShopName] = useState('');
@@ -30,13 +28,17 @@ export default function OwnerDashboard() {
     return () => socket.off('newBooking');
   }, []);
 
-  // --- REAL AUTHENTICATION FUNCTION ---
+  const handleLogout = () => {
+    setToken(null);
+    setMyShop(null);
+    setQueue([]);
+    alert("Logged out successfully!");
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
     const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
-    const payload = isLoginMode 
-      ? { email, password } 
-      : { name, email, password, role: "shop_owner" };
+    const payload = isLoginMode ? { email, password } : { name, email, password, role: "shop_owner" };
 
     try {
       const res = await fetch(`${API_URL}${endpoint}`, {
@@ -45,16 +47,13 @@ export default function OwnerDashboard() {
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-
       if (res.ok && data.token) {
         setToken(data.token);
-        fetchMyShop(data.token); // Check if they already have a shop!
+        fetchMyShop(data.token);
       } else {
         alert(data.message || "Authentication failed");
       }
-    } catch (error) {
-      console.error("Auth error:", error);
-    }
+    } catch (error) { console.error("Auth error:", error); }
   };
 
   const fetchMyShop = async (authToken) => {
@@ -113,30 +112,33 @@ export default function OwnerDashboard() {
 
   return (
     <div className="max-w-4xl mx-auto bg-gray-50 min-h-screen p-6 font-sans">
-      <Link to="/" className="text-blue-600 text-sm font-semibold mb-4 inline-block">&larr; Back to Home</Link>
+      <div className="flex justify-between items-center mb-4">
+        <Link to="/" className="text-blue-600 text-sm font-semibold">&larr; Back to Home</Link>
+        {token && (
+          <button onClick={handleLogout} className="text-red-500 text-sm font-bold border border-red-200 px-3 py-1 rounded hover:bg-red-50">
+            Logout
+          </button>
+        )}
+      </div>
       
       <header className="mb-8 border-b pb-4">
         <h1 className="text-3xl font-bold text-gray-800">Partner Portal (Owner)</h1>
         <p className="text-gray-500">Manage your barbershop, menu, and live queue.</p>
       </header>
 
-      {/* --- REAL LOGIN/REGISTER FORM --- */}
       {!token && (
         <div className="bg-white p-8 rounded-lg shadow-md max-w-md mx-auto border border-gray-200">
           <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{isLoginMode ? 'Owner Login' : 'Become a Partner'}</h2>
-          
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             {!isLoginMode && (
               <input type="text" placeholder="Your Full Name" required className="border p-3 rounded" value={name} onChange={e => setName(e.target.value)} />
             )}
             <input type="email" placeholder="Email Address" required className="border p-3 rounded" value={email} onChange={e => setEmail(e.target.value)} />
             <input type="password" placeholder="Password" required className="border p-3 rounded" value={password} onChange={e => setPassword(e.target.value)} />
-            
             <button type="submit" className="bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors mt-2">
               {isLoginMode ? 'Login to Dashboard' : 'Register Account'}
             </button>
           </form>
-
           <p className="mt-6 text-sm text-center text-gray-600">
             {isLoginMode ? "New to the platform? " : "Already a partner? "}
             <span className="text-blue-600 cursor-pointer font-bold hover:underline" onClick={() => setIsLoginMode(!isLoginMode)}>
@@ -146,41 +148,30 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* --- IF LOGGED IN BUT NO SHOP CREATED YET --- */}
       {token && !myShop && (
         <div className="bg-white p-8 rounded-lg shadow-lg border-t-4 border-blue-600 mb-8 max-w-lg mx-auto mt-10">
           <h2 className="text-2xl font-bold mb-2">Step 2: Setup Your Shop</h2>
-          <p className="text-gray-500 mb-6 text-sm">Customers need to know where to find you. Enter your shop details below to go live.</p>
-          
-          <input className="w-full border p-3 mb-4 rounded bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Official Shop Name (e.g. Urban Fade)" />
-          <input className="w-full border p-3 mb-6 rounded bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="Full Address with Pincode" />
-          
-          <button onClick={handleCreateShop} className="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-green-700 shadow-md">
-            Launch My Shop
-          </button>
+          <input className="w-full border p-3 mb-4 rounded bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Official Shop Name" />
+          <input className="w-full border p-3 mb-6 rounded bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="Full Address" />
+          <button onClick={handleCreateShop} className="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-green-700">Launch My Shop</button>
         </div>
       )}
 
-      {/* --- FULL DASHBOARD (ONLY SHOWS IF THEY HAVE A SHOP) --- */}
       {token && myShop && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="col-span-1 bg-white p-6 rounded shadow-md h-fit">
             <h2 className="text-xl font-bold mb-4">Add Service</h2>
-            <input className="w-full border p-2 mb-2 rounded text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="Service Name (e.g. Haircut)" />
+            <input className="w-full border p-2 mb-2 rounded text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="Service Name" />
             <div className="flex gap-2 mb-4">
               <input className="w-1/2 border p-2 rounded text-sm bg-gray-50" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="Price (₹)" />
               <input className="w-1/2 border p-2 rounded text-sm bg-gray-50" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
             </div>
             <button onClick={handleAddService} className="w-full bg-black text-white py-2 rounded font-bold text-sm">Add to Menu</button>
           </div>
-
           <div className="col-span-2 bg-white p-6 rounded shadow-md">
-            <h2 className="text-xl font-bold mb-4 flex items-center justify-between">
-              Live Queue 
-              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full animate-pulse">Live</span>
-            </h2>
+            <h2 className="text-xl font-bold mb-4 flex items-center justify-between">Live Queue <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full animate-pulse">Live</span></h2>
             {queue.length === 0 ? (
-              <p className="text-gray-500 italic p-4 text-center border-2 border-dashed rounded">No bookings yet today. Waiting for customers...</p>
+              <p className="text-gray-500 italic p-4 text-center border-2 border-dashed rounded">No bookings yet today.</p>
             ) : (
               <div className="grid gap-3">
                 {queue.map((booking) => (
@@ -191,12 +182,8 @@ export default function OwnerDashboard() {
                       <p className="text-xs mt-1 font-bold text-blue-600 uppercase">Status: {booking.status}</p>
                     </div>
                     <div className="flex flex-col gap-2">
-                      {booking.status === 'pending' && (
-                        <button onClick={() => handleUpdateStatus(booking._id, 'in-chair')} className="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-bold shadow">Mark "In Chair"</button>
-                      )}
-                      {booking.status === 'in-chair' && (
-                        <button onClick={() => handleUpdateStatus(booking._id, 'completed')} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold shadow">Mark "Done"</button>
-                      )}
+                      {booking.status === 'pending' && <button onClick={() => handleUpdateStatus(booking._id, 'in-chair')} className="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-bold shadow">Mark "In Chair"</button>}
+                      {booking.status === 'in-chair' && <button onClick={() => handleUpdateStatus(booking._id, 'completed')} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold shadow">Mark "Done"</button>}
                     </div>
                   </div>
                 ))}
