@@ -3,8 +3,68 @@ import { Link } from 'react-router-dom';
 import io from 'socket.io-client';
 
 // Point this to your Node.js backend
-const API_URL = 'http://localhost:5000/api'; 
-const socket = io('http://localhost:5000');
+const API_URL = 'import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import io from 'socket.io-client';
+
+// Pointing to your LIVE Render Backend
+const API_URL = 'https://salon-backend-hlzb.onrender.com/api'; 
+const socket = io('https://salon-backend-hlzb.onrender.com');
+
+export default function CustomerView() {
+  const [token, setToken] = useState(null);
+  const [email, setEmail] = useState('test@customer.com');
+  const [password, setPassword] = useState('password123');
+
+  const [shops, setShops] = useState([]);
+  const [selectedShop, setSelectedShop] = useState(null);
+  const [services, setServices] = useState([]);
+  const [selectedService, setSelectedService] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+
+  const availableSlots = ["10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM"];
+
+  useEffect(() => {
+    fetch(`${API_URL}/shops`)
+      .then(res => res.json())
+      .then(data => setShops(data))
+      .catch(err => console.error("Error fetching shops:", err));
+  }, []);
+
+  const handleShopSelect = (shop) => {
+    setSelectedShop(shop);
+    setSelectedService(null);
+    
+    fetch(`${API_URL}/services/${shop._id}`)
+      .then(res => res.json())
+      .then(data => setServices(data))
+      .catch(err => console.error("Error fetching services:", err));
+
+    socket.emit('joinShopRoom', shop._id);
+  };
+
+  const handleQuickLogin = async () => {
+    try {
+      let res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: "Test Customer", email, password, role: "customer", phone: "9999999999" })
+      });
+      let data = await res.json();
+
+      if (res.status === 400) {
+        res = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        data = await res.json();
+      }
+
+      if (data.token) {
+        setToken(data.token);
+        alert("Logged in'; 
+const socket = io('https://salon-backend-hlzb.onrender.com');
 
 export default function CustomerView() {
   const [token, setToken] = useState(null);
