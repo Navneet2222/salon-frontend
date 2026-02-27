@@ -6,61 +6,57 @@ const API_URL = 'https://salon-backend-hlzb.onrender.com/api';
 const socket = io('https://salon-backend-hlzb.onrender.com');
 
 export default function OwnerDashboard() {
-  // Auth State
+  // --- AUTHENTICATION STATE ---
   const [token, setToken] = useState(null);
-  const [email, setEmail] = useState('barber@shop.com');
-  const [password, setPassword] = useState('password123');
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  // Dashboard State
+  // --- SHOP & QUEUE STATE ---
   const [myShop, setMyShop] = useState(null);
   const [queue, setQueue] = useState([]);
+  const [shopName, setShopName] = useState('');
+  const [shopAddress, setShopAddress] = useState('');
+  const [serviceName, setServiceName] = useState('');
+  const [servicePrice, setServicePrice] = useState('');
+  const [serviceDuration, setServiceDuration] = useState('');
 
-  // Form States
-  const [shopName, setShopName] = useState('Urban Fade Studio');
-  const [shopAddress, setShopAddress] = useState('123 Main St, Bangalore');
-  const [serviceName, setServiceName] = useState('Premium Fade');
-  const [servicePrice, setServicePrice] = useState('350');
-  const [serviceDuration, setServiceDuration] = useState('30');
-
-  // Real-time listener for new bookings
   useEffect(() => {
     socket.on('newBooking', (booking) => {
       alert('🔔 New Booking Alert!');
       setQueue((prevQueue) => [...prevQueue, booking]);
     });
-
     return () => socket.off('newBooking');
   }, []);
 
-  // Auth: Quick Login/Register
-  const handleQuickLogin = async () => {
+  // --- REAL AUTHENTICATION FUNCTION ---
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
+    const payload = isLoginMode 
+      ? { email, password } 
+      : { name, email, password, role: "shop_owner" };
+
     try {
-      let res = await fetch(`${API_URL}/auth/register`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: "Barber Owner", email, password, role: "shop_owner", phone: "8888888888" })
+        body: JSON.stringify(payload)
       });
-      let data = await res.json();
+      const data = await res.json();
 
-      if (res.status === 400) {
-        res = await fetch(`${API_URL}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-        data = await res.json();
-      }
-
-      if (data.token) {
+      if (res.ok && data.token) {
         setToken(data.token);
-        fetchMyShop(data.token);
+        fetchMyShop(data.token); // Check if they already have a shop!
+      } else {
+        alert(data.message || "Authentication failed");
       }
     } catch (error) {
       console.error("Auth error:", error);
     }
   };
 
-  // Fetch Owner's Shop Details
   const fetchMyShop = async (authToken) => {
     try {
       const res = await fetch(`${API_URL}/shops/owner/my-shop`, {
@@ -70,86 +66,49 @@ export default function OwnerDashboard() {
         const shopData = await res.json();
         setMyShop(shopData);
         fetchQueue(shopData._id, authToken);
-        socket.emit('joinShopRoom', shopData._id); // Join the real-time room!
+        socket.emit('joinShopRoom', shopData._id); 
       }
-    } catch (error) {
-      console.error("Error fetching shop:", error);
-    }
+    } catch (error) { console.error("Error fetching shop:", error); }
   };
 
-  // Create a Shop Profile
   const handleCreateShop = async () => {
+    if(!shopName || !shopAddress) return alert("Please fill in both fields");
     try {
       const res = await fetch(`${API_URL}/shops`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ name: shopName, address: shopAddress })
       });
-      if (res.ok) {
-        alert("Shop created! You are now live.");
-        fetchMyShop(token);
-      }
-    } catch (error) {
-      console.error("Error creating shop:", error);
-    }
+      if (res.ok) fetchMyShop(token);
+    } catch (error) { console.error("Error creating shop:", error); }
   };
 
-  // Add a Service to the Menu
   const handleAddService = async () => {
     try {
       const res = await fetch(`${API_URL}/services`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ name: serviceName, price: Number(servicePrice), durationMinutes: Number(serviceDuration) })
       });
       if (res.ok) {
-        alert(`${serviceName} added to your menu!`);
-        setServiceName('');
-        setServicePrice('');
+        alert(`${serviceName} added!`);
+        setServiceName(''); setServicePrice(''); setServiceDuration('');
       }
-    } catch (error) {
-      console.error("Error adding service:", error);
-    }
+    } catch (error) { console.error("Error adding service:", error); }
   };
 
-  // Fetch Live Queue
   const fetchQueue = async (shopId, authToken) => {
-    try {
-      const res = await fetch(`${API_URL}/bookings/queue?shopId=${shopId}`, {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-      if (res.ok) {
-        setQueue(await res.json());
-      }
-    } catch (error) {
-      console.error("Error fetching queue:", error);
-    }
+    const res = await fetch(`${API_URL}/bookings/queue?shopId=${shopId}`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+    if (res.ok) setQueue(await res.json());
   };
 
-  // Update Booking Status
   const handleUpdateStatus = async (bookingId, newStatus) => {
-    try {
-      const res = await fetch(`${API_URL}/bookings/${bookingId}/status`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (res.ok) {
-        // Update local state to reflect change instantly
-        setQueue(queue.map(b => b._id === bookingId ? { ...b, status: newStatus } : b));
-      }
-    } catch (error) {
-      console.error("Error updating status:", error);
-    }
+    const res = await fetch(`${API_URL}/bookings/${bookingId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ status: newStatus })
+    });
+    if (res.ok) setQueue(queue.map(b => b._id === bookingId ? { ...b, status: newStatus } : b));
   };
 
   return (
@@ -161,50 +120,67 @@ export default function OwnerDashboard() {
         <p className="text-gray-500">Manage your barbershop, menu, and live queue.</p>
       </header>
 
-      {/* STEP 1: LOGIN */}
+      {/* --- REAL LOGIN/REGISTER FORM --- */}
       {!token && (
-        <div className="bg-white p-6 rounded shadow-md max-w-sm">
-          <h2 className="text-xl font-bold mb-4">Owner Login</h2>
-          <button onClick={handleQuickLogin} className="w-full bg-blue-600 text-white py-3 rounded font-bold hover:bg-blue-700">
-            Quick Auto-Login as Barber
+        <div className="bg-white p-8 rounded-lg shadow-md max-w-md mx-auto border border-gray-200">
+          <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">{isLoginMode ? 'Owner Login' : 'Become a Partner'}</h2>
+          
+          <form onSubmit={handleAuth} className="flex flex-col gap-4">
+            {!isLoginMode && (
+              <input type="text" placeholder="Your Full Name" required className="border p-3 rounded" value={name} onChange={e => setName(e.target.value)} />
+            )}
+            <input type="email" placeholder="Email Address" required className="border p-3 rounded" value={email} onChange={e => setEmail(e.target.value)} />
+            <input type="password" placeholder="Password" required className="border p-3 rounded" value={password} onChange={e => setPassword(e.target.value)} />
+            
+            <button type="submit" className="bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors mt-2">
+              {isLoginMode ? 'Login to Dashboard' : 'Register Account'}
+            </button>
+          </form>
+
+          <p className="mt-6 text-sm text-center text-gray-600">
+            {isLoginMode ? "New to the platform? " : "Already a partner? "}
+            <span className="text-blue-600 cursor-pointer font-bold hover:underline" onClick={() => setIsLoginMode(!isLoginMode)}>
+              {isLoginMode ? 'Apply Here' : 'Login'}
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* --- IF LOGGED IN BUT NO SHOP CREATED YET --- */}
+      {token && !myShop && (
+        <div className="bg-white p-8 rounded-lg shadow-lg border-t-4 border-blue-600 mb-8 max-w-lg mx-auto mt-10">
+          <h2 className="text-2xl font-bold mb-2">Step 2: Setup Your Shop</h2>
+          <p className="text-gray-500 mb-6 text-sm">Customers need to know where to find you. Enter your shop details below to go live.</p>
+          
+          <input className="w-full border p-3 mb-4 rounded bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Official Shop Name (e.g. Urban Fade)" />
+          <input className="w-full border p-3 mb-6 rounded bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="Full Address with Pincode" />
+          
+          <button onClick={handleCreateShop} className="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-green-700 shadow-md">
+            Launch My Shop
           </button>
         </div>
       )}
 
-      {/* STEP 2: CREATE SHOP (If no shop exists) */}
-      {token && !myShop && (
-        <div className="bg-white p-6 rounded shadow-md mb-8">
-          <h2 className="text-xl font-bold mb-4">Setup Your Shop Profile</h2>
-          <input className="w-full border p-2 mb-3 rounded" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Shop Name" />
-          <input className="w-full border p-2 mb-4 rounded" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="Address" />
-          <button onClick={handleCreateShop} className="bg-green-600 text-white px-6 py-2 rounded font-bold">Launch Shop</button>
-        </div>
-      )}
-
-      {/* STEP 3: MANAGE SHOP & QUEUE (If shop exists) */}
+      {/* --- FULL DASHBOARD (ONLY SHOWS IF THEY HAVE A SHOP) --- */}
       {token && myShop && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Left Column: Menu Management */}
           <div className="col-span-1 bg-white p-6 rounded shadow-md h-fit">
             <h2 className="text-xl font-bold mb-4">Add Service</h2>
-            <input className="w-full border p-2 mb-2 rounded text-sm" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="Service Name (e.g. Haircut)" />
+            <input className="w-full border p-2 mb-2 rounded text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="Service Name (e.g. Haircut)" />
             <div className="flex gap-2 mb-4">
-              <input className="w-1/2 border p-2 rounded text-sm" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="Price (₹)" />
-              <input className="w-1/2 border p-2 rounded text-sm" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
+              <input className="w-1/2 border p-2 rounded text-sm bg-gray-50" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="Price (₹)" />
+              <input className="w-1/2 border p-2 rounded text-sm bg-gray-50" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
             </div>
             <button onClick={handleAddService} className="w-full bg-black text-white py-2 rounded font-bold text-sm">Add to Menu</button>
           </div>
 
-          {/* Right Column: Live Queue */}
           <div className="col-span-2 bg-white p-6 rounded shadow-md">
             <h2 className="text-xl font-bold mb-4 flex items-center justify-between">
               Live Queue 
               <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full animate-pulse">Live</span>
             </h2>
-            
             {queue.length === 0 ? (
-              <p className="text-gray-500 italic">No bookings yet today. Waiting for customers...</p>
+              <p className="text-gray-500 italic p-4 text-center border-2 border-dashed rounded">No bookings yet today. Waiting for customers...</p>
             ) : (
               <div className="grid gap-3">
                 {queue.map((booking) => (
@@ -214,17 +190,12 @@ export default function OwnerDashboard() {
                       <p className="text-sm text-gray-600">Customer: {booking.customerId?.name} | Paid: ₹{booking.payment?.amount}</p>
                       <p className="text-xs mt-1 font-bold text-blue-600 uppercase">Status: {booking.status}</p>
                     </div>
-                    
                     <div className="flex flex-col gap-2">
                       {booking.status === 'pending' && (
-                        <button onClick={() => handleUpdateStatus(booking._id, 'in-chair')} className="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-bold shadow">
-                          Mark "In Chair"
-                        </button>
+                        <button onClick={() => handleUpdateStatus(booking._id, 'in-chair')} className="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-bold shadow">Mark "In Chair"</button>
                       )}
                       {booking.status === 'in-chair' && (
-                        <button onClick={() => handleUpdateStatus(booking._id, 'completed')} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold shadow">
-                          Mark "Done"
-                        </button>
+                        <button onClick={() => handleUpdateStatus(booking._id, 'completed')} className="bg-green-600 text-white px-3 py-1 rounded text-sm font-bold shadow">Mark "Done"</button>
                       )}
                     </div>
                   </div>
@@ -232,7 +203,6 @@ export default function OwnerDashboard() {
               </div>
             )}
           </div>
-
         </div>
       )}
     </div>

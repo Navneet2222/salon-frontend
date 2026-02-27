@@ -2,22 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import io from 'socket.io-client';
 
-// Pointing to your LIVE Render Backend
 const API_URL = 'https://salon-backend-hlzb.onrender.com/api'; 
 const socket = io('https://salon-backend-hlzb.onrender.com');
 
 export default function CustomerView() {
+  // --- AUTHENTICATION STATE ---
   const [token, setToken] = useState(null);
-  const [email, setEmail] = useState('test@customer.com');
-  const [password, setPassword] = useState('password123');
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
 
+  // --- APP STATE ---
   const [shops, setShops] = useState([]);
   const [selectedShop, setSelectedShop] = useState(null);
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
-
-  const availableSlots = ["10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM"];
+  const availableSlots = ["10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "1:00 PM", "2:00 PM"];
 
   useEffect(() => {
     fetch(`${API_URL}/shops`)
@@ -29,36 +31,34 @@ export default function CustomerView() {
   const handleShopSelect = (shop) => {
     setSelectedShop(shop);
     setSelectedService(null);
-    
     fetch(`${API_URL}/services/${shop._id}`)
       .then(res => res.json())
-      .then(data => setServices(data))
-      .catch(err => console.error("Error fetching services:", err));
-
+      .then(data => setServices(data));
     socket.emit('joinShopRoom', shop._id);
   };
 
-  const handleQuickLogin = async () => {
+  // --- REAL AUTHENTICATION FUNCTION ---
+  const handleAuth = async (e) => {
+    e.preventDefault(); // Prevent page refresh
+    
+    const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
+    const payload = isLoginMode 
+      ? { phone, password } 
+      : { name, phone, password, role: "customer", email: `${phone}@placeholder.com` }; // Fallback email if DB requires it
+
     try {
-      let res = await fetch(`${API_URL}/auth/register`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: "Test Customer", email, password, role: "customer", phone: "9999999999" })
+        body: JSON.stringify(payload)
       });
-      let data = await res.json();
+      const data = await res.json();
 
-      if (res.status === 400) {
-        res = await fetch(`${API_URL}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-        data = await res.json();
-      }
-
-      if (data.token) {
+      if (res.ok && data.token) {
         setToken(data.token);
-        alert("Logged in successfully!");
+        alert(isLoginMode ? "Welcome back!" : "Account created successfully!");
+      } else {
+        alert(data.message || "Authentication failed");
       }
     } catch (error) {
       console.error("Auth error:", error);
@@ -66,128 +66,114 @@ export default function CustomerView() {
   };
 
   const handleBooking = async () => {
-    if (!token) return alert("Please login first!");
     if (!selectedSlot) return alert("Please pick a time!");
-
     try {
       const res = await fetch(`${API_URL}/bookings`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          shopId: selectedShop._id,
-          serviceId: selectedService._id,
+          shopId: selectedShop._id, serviceId: selectedService._id,
           appointmentDate: new Date().toISOString().split('T')[0],
-          timeSlot: selectedSlot,
-          advanceAmount: 50
+          timeSlot: selectedSlot, advanceAmount: 50
         })
       });
-
-      const data = await res.json();
       if (res.ok) {
-        alert("Booking Confirmed! The Barber's dashboard just updated.");
+        alert("Booking Confirmed! The shop owner has been notified.");
         setSelectedSlot(null);
       } else {
-        alert(data.message);
+        const data = await res.json(); alert(data.message);
       }
-    } catch (error) {
-      console.error("Booking failed:", error);
-    }
+    } catch (error) { console.error("Booking failed:", error); }
   };
 
   return (
     <div className="max-w-md mx-auto bg-gray-50 min-h-screen p-4 font-sans">
       <Link to="/" className="text-blue-600 text-sm font-semibold mb-4 inline-block">&larr; Back to Home</Link>
       
+      {/* --- REAL LOGIN/REGISTER FORM --- */}
       {!token && (
-        <div className="bg-yellow-100 p-3 mb-4 rounded border border-yellow-300 text-sm">
-          <p className="font-bold mb-2">Step 1: Authenticate</p>
-          <button onClick={handleQuickLogin} className="bg-black text-white px-4 py-2 rounded w-full">
-            Quick Auto-Login as Customer
-          </button>
-        </div>
-      )}
-
-      <header className="mb-6 text-center">
-        <h1 className="text-2xl font-bold text-gray-800">The Salon Marketplace</h1>
-        <p className="text-sm text-gray-500">Find a shop & skip the wait</p>
-      </header>
-
-      {!selectedShop && (
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Select a Nearby Shop</h2>
-          <div className="grid gap-3">
-            {shops.length === 0 ? <p className="text-gray-500 p-4 border rounded bg-white text-center">No shops available. Create one in the Owner Dashboard!</p> : null}
-            {shops.map(shop => (
-              <div 
-                key={shop._id}
-                onClick={() => handleShopSelect(shop)}
-                className="p-4 border rounded-lg cursor-pointer bg-white hover:border-blue-500 hover:shadow-md transition-all"
-              >
-                <p className="font-bold text-lg">{shop.name}</p>
-                <p className="text-sm text-gray-500">{shop.address}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {selectedShop && (
-        <div>
-          <button onClick={() => setSelectedShop(null)} className="text-blue-600 text-sm font-semibold mb-4">
-            &larr; Back to Shops
-          </button>
+        <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-gray-200">
+          <h2 className="text-2xl font-bold mb-4 text-center">{isLoginMode ? 'Customer Login' : 'Create Account'}</h2>
           
-          <h2 className="text-xl font-bold mb-4">{selectedShop.name}</h2>
+          <form onSubmit={handleAuth} className="flex flex-col gap-4">
+            {!isLoginMode && (
+              <input type="text" placeholder="Full Name" required className="border p-3 rounded" value={name} onChange={e => setName(e.target.value)} />
+            )}
+            <input type="tel" placeholder="Phone Number" required className="border p-3 rounded" value={phone} onChange={e => setPhone(e.target.value)} />
+            <input type="password" placeholder="Password" required className="border p-3 rounded" value={password} onChange={e => setPassword(e.target.value)} />
+            
+            <button type="submit" className="bg-black text-white font-bold py-3 rounded-lg hover:bg-gray-800 transition-colors">
+              {isLoginMode ? 'Secure Login' : 'Sign Up'}
+            </button>
+          </form>
 
-          <h3 className="text-md font-semibold mb-2">1. Select Service</h3>
-          <div className="grid gap-2 mb-6">
-            {services.length === 0 ? <p className="text-sm text-gray-500">This shop hasn't added any services yet.</p> : null}
-            {services.map(service => (
-              <div 
-                key={service._id}
-                onClick={() => setSelectedService(service)}
-                className={`p-3 border rounded cursor-pointer flex justify-between ${selectedService?._id === service._id ? 'border-blue-600 bg-blue-50' : 'bg-white'}`}
-              >
-                <div>
-                  <p className="font-medium">{service.name}</p>
-                  <p className="text-xs text-gray-500">{service.durationMinutes} mins</p>
-                </div>
-                <p className="font-bold">₹{service.price}</p>
-              </div>
-            ))}
-          </div>
+          <p className="mt-4 text-sm text-center text-gray-600">
+            {isLoginMode ? "Don't have an account? " : "Already have an account? "}
+            <span className="text-blue-600 cursor-pointer font-bold hover:underline" onClick={() => setIsLoginMode(!isLoginMode)}>
+              {isLoginMode ? 'Sign Up' : 'Login'}
+            </span>
+          </p>
+        </div>
+      )}
 
-          {selectedService && (
-            <div className="mb-6">
-              <h3 className="text-md font-semibold mb-2">2. Pick a Time Today</h3>
-              <div className="grid grid-cols-3 gap-2">
-                {availableSlots.map(slot => (
-                  <button
-                    key={slot}
-                    onClick={() => setSelectedSlot(slot)}
-                    className={`py-2 rounded text-sm font-medium transition-colors ${
-                      selectedSlot === slot ? 'bg-blue-600 text-white' : 'bg-white border border-gray-300 hover:border-blue-500'
-                    }`}
-                  >
-                    {slot}
-                  </button>
+      {/* --- REST OF THE APP (ONLY SHOWS IF LOGGED IN) --- */}
+      {token && (
+        <>
+          <header className="mb-6 text-center">
+            <h1 className="text-2xl font-bold text-gray-800">The Salon Marketplace</h1>
+            <p className="text-sm text-gray-500">Find a shop & skip the wait</p>
+          </header>
+
+          {!selectedShop && (
+            <div>
+              <h2 className="text-lg font-semibold mb-3">Select a Nearby Shop</h2>
+              <div className="grid gap-3">
+                {shops.map(shop => (
+                  <div key={shop._id} onClick={() => handleShopSelect(shop)} className="p-4 border rounded-lg cursor-pointer bg-white shadow-sm hover:border-blue-500 transition-all">
+                    <p className="font-bold text-lg">{shop.name}</p>
+                    <p className="text-sm text-gray-500">{shop.address}</p>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {selectedSlot && (
-            <button 
-              onClick={handleBooking}
-              className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 shadow-lg"
-            >
-              Pay ₹50 Advance & Confirm
-            </button>
+          {selectedShop && (
+            <div>
+              <button onClick={() => setSelectedShop(null)} className="text-blue-600 text-sm font-semibold mb-4">&larr; Back to Shops</button>
+              <h2 className="text-xl font-bold mb-4">{selectedShop.name}</h2>
+
+              <h3 className="text-md font-semibold mb-2">1. Select Service</h3>
+              <div className="grid gap-2 mb-6">
+                {services.map(service => (
+                  <div key={service._id} onClick={() => setSelectedService(service)} className={`p-3 border rounded cursor-pointer flex justify-between ${selectedService?._id === service._id ? 'border-blue-600 bg-blue-50' : 'bg-white'}`}>
+                    <div><p className="font-medium">{service.name}</p><p className="text-xs text-gray-500">{service.durationMinutes} mins</p></div>
+                    <p className="font-bold">₹{service.price}</p>
+                  </div>
+                ))}
+              </div>
+
+              {selectedService && (
+                <div className="mb-6">
+                  <h3 className="text-md font-semibold mb-2">2. Pick a Time Today</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableSlots.map(slot => (
+                      <button key={slot} onClick={() => setSelectedSlot(slot)} className={`py-2 rounded text-sm font-medium transition-colors ${selectedSlot === slot ? 'bg-blue-600 text-white' : 'bg-white border border-gray-300'}`}>
+                        {slot}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedSlot && (
+                <button onClick={handleBooking} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 shadow-lg">
+                  Pay ₹50 Advance & Confirm
+                </button>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
