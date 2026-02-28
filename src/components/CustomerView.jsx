@@ -5,6 +5,19 @@ import io from 'socket.io-client';
 const API_URL = 'https://salon-backend-hlzb.onrender.com/api'; 
 const socket = io('https://salon-backend-hlzb.onrender.com');
 
+// Auto-generate time slots from 10:00 AM to 10:00 PM
+const generateTimeSlots = () => {
+  const slots = [];
+  for (let i = 10; i <= 21; i++) { 
+    const hour = i > 12 ? i - 12 : i;
+    const ampm = i >= 12 ? 'PM' : 'AM';
+    slots.push(`${hour}:00 ${ampm}`);
+    slots.push(`${hour}:30 ${ampm}`);
+  }
+  slots.push("10:00 PM");
+  return slots;
+};
+
 export default function CustomerView() {
   const [token, setToken] = useState(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -13,12 +26,14 @@ export default function CustomerView() {
   const [password, setPassword] = useState('');
 
   const [shops, setShops] = useState([]);
-  const [searchQuery, setSearchQuery] = useState(''); // NEW: Search state
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedShop, setSelectedShop] = useState(null);
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const availableSlots = ["10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "1:00 PM", "2:00 PM"];
+  
+  // Use the new dynamically generated array!
+  const availableSlots = generateTimeSlots();
 
   useEffect(() => {
     fetch(`${API_URL}/shops`)
@@ -88,7 +103,6 @@ export default function CustomerView() {
     } catch (error) { console.error("Booking failed:", error); }
   };
 
-  // NEW: Filter logic to match the search query against shop name or address
   const filteredShops = shops.filter(shop => 
     shop.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     shop.address.toLowerCase().includes(searchQuery.toLowerCase())
@@ -135,25 +149,33 @@ export default function CustomerView() {
           
           {!selectedShop && (
             <div>
-              {/* NEW: The Search Bar UI */}
               <div className="mb-6">
                 <input 
                   type="text" 
-                  placeholder="Search by area (e.g., Indiranagar) or name..." 
+                  placeholder="Search by area or shop name..." 
                   className="w-full border-2 border-gray-200 p-3 rounded-lg shadow-sm focus:outline-none focus:border-blue-500 transition-colors"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
 
-              <div className="grid gap-3">
+              <div className="grid gap-4">
                 {filteredShops.length === 0 ? (
                   <p className="text-gray-500 text-center p-4 bg-white rounded border">No shops found matching your search.</p>
                 ) : (
                   filteredShops.map(shop => (
-                    <div key={shop._id} onClick={() => handleShopSelect(shop)} className="p-4 border rounded-lg cursor-pointer bg-white shadow-sm hover:border-blue-500 transition-all">
-                      <p className="font-bold text-lg">{shop.name}</p>
-                      <p className="text-sm text-gray-500">{shop.address}</p>
+                    <div key={shop._id} onClick={() => handleShopSelect(shop)} className="border rounded-xl cursor-pointer bg-white shadow-sm hover:shadow-md hover:-translate-y-1 transition-all overflow-hidden">
+                      {shop.bannerImage ? (
+                        <img src={shop.bannerImage} alt={shop.name} className="w-full h-40 object-cover bg-gray-100" />
+                      ) : (
+                        <div className="w-full h-32 bg-gray-200 flex items-center justify-center text-gray-400 text-sm font-medium">
+                          No Shop Photo
+                        </div>
+                      )}
+                      <div className="p-4">
+                        <p className="font-bold text-lg text-gray-900">{shop.name}</p>
+                        <p className="text-sm text-gray-500 mt-1 line-clamp-1">{shop.address}</p>
+                      </div>
                     </div>
                   ))
                 )}
@@ -164,27 +186,43 @@ export default function CustomerView() {
           {selectedShop && (
             <div>
               <button onClick={() => setSelectedShop(null)} className="text-blue-600 text-sm font-semibold mb-4">&larr; Back to Shops</button>
-              <h2 className="text-xl font-bold mb-4">{selectedShop.name}</h2>
+              
+              {selectedShop.bannerImage && (
+                <img src={selectedShop.bannerImage} alt={selectedShop.name} className="w-full h-48 object-cover rounded-xl mb-4 shadow-sm" />
+              )}
+              
+              <h2 className="text-2xl font-bold mb-1">{selectedShop.name}</h2>
+              <p className="text-sm text-gray-500 mb-6">{selectedShop.address}</p>
+
+              <h3 className="text-md font-bold text-gray-800 mb-3">1. Select Service</h3>
               <div className="grid gap-2 mb-6">
                 {services.map(service => (
-                  <div key={service._id} onClick={() => setSelectedService(service)} className={`p-3 border rounded cursor-pointer flex justify-between ${selectedService?._id === service._id ? 'border-blue-600 bg-blue-50' : 'bg-white'}`}>
-                    <div><p className="font-medium">{service.name}</p></div>
-                    <p className="font-bold">₹{service.price}</p>
+                  <div key={service._id} onClick={() => setSelectedService(service)} className={`p-4 border rounded-lg cursor-pointer flex justify-between items-center transition-colors ${selectedService?._id === service._id ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' : 'bg-white hover:border-gray-400'}`}>
+                    <div>
+                      <p className="font-bold text-gray-800">{service.name}</p>
+                      <p className="text-xs text-gray-500 mt-1">{service.durationMinutes} mins</p>
+                    </div>
+                    <p className="font-black text-lg text-green-600">₹{service.price}</p>
                   </div>
                 ))}
               </div>
+              
               {selectedService && (
-                <div className="grid grid-cols-3 gap-2 mb-6">
-                  {availableSlots.map(slot => (
-                    <button key={slot} onClick={() => setSelectedSlot(slot)} className={`py-2 rounded text-sm font-medium ${selectedSlot === slot ? 'bg-blue-600 text-white' : 'bg-white border'}`}>
-                      {slot}
-                    </button>
-                  ))}
+                <div className="mb-8">
+                  <h3 className="text-md font-bold text-gray-800 mb-3">2. Pick a Time Today</h3>
+                  <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1">
+                    {availableSlots.map(slot => (
+                      <button key={slot} onClick={() => setSelectedSlot(slot)} className={`py-3 rounded-lg text-sm font-bold transition-all ${selectedSlot === slot ? 'bg-blue-600 text-white shadow-md scale-105' : 'bg-white border border-gray-300 text-gray-600 hover:border-blue-400'}`}>
+                        {slot}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+              
               {selectedSlot && (
-                <button onClick={handleBooking} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold">
-                  Confirm Booking
+                <button onClick={handleBooking} className="w-full bg-black text-white py-4 rounded-xl font-bold text-lg hover:bg-gray-900 shadow-xl flex justify-center items-center gap-2 mt-4">
+                  <span>Pay ₹50 Advance & Book</span>
                 </button>
               )}
             </div>
