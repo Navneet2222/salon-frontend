@@ -17,6 +17,7 @@ export default function OwnerDashboard() {
   // Shop Data
   const [myShop, setMyShop] = useState(null);
   const [queue, setQueue] = useState([]);
+  const [myServices, setMyServices] = useState([]); // NEW: State to hold the menu items
   
   // Shop Setup & Edit State
   const [isEditingShop, setIsEditingShop] = useState(false);
@@ -41,6 +42,7 @@ export default function OwnerDashboard() {
     setToken(null);
     setMyShop(null);
     setQueue([]);
+    setMyServices([]);
     setIsEditingShop(false);
     alert("Logged out successfully!");
   };
@@ -49,10 +51,8 @@ export default function OwnerDashboard() {
     e.preventDefault();
     const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
     
-    // Determine if input is email or phone
     const isEmail = phoneOrEmail.includes('@');
     
-    // Payload generation with placeholder email for phone registrations
     const payload = isLoginMode 
       ? { [isEmail ? 'email' : 'phone']: phoneOrEmail, password } 
       : { 
@@ -95,7 +95,9 @@ export default function OwnerDashboard() {
         setShopAddress(shopData.address);
         setBannerImage(shopData.bannerImage || '');
         
+        // Fetch queue and menu once shop is loaded
         fetchQueue(shopData._id, authToken);
+        fetchMyServices(shopData._id); 
         socket.emit('joinShopRoom', shopData._id); 
       }
     } catch (error) { 
@@ -103,10 +105,22 @@ export default function OwnerDashboard() {
     }
   };
 
+  // NEW: Function to pull the menu items to display on the dashboard
+  const fetchMyServices = async (shopId) => {
+    try {
+      const res = await fetch(`${API_URL}/services/${shopId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMyServices(data);
+      }
+    } catch (error) {
+      console.error("Error fetching services:", error);
+    }
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // UPDATED: Allow images up to 5MB so high-quality gallery photos don't fail
       if (file.size > 5 * 1024 * 1024) {
         return alert("Please choose an image smaller than 5MB!");
       }
@@ -135,7 +149,6 @@ export default function OwnerDashboard() {
       }
     } catch (error) { 
       console.error("Error creating shop:", error); 
-      // UPDATED: Added a visible alert so it never fails silently again!
       alert("Network Error: The image might still be too large, or the backend is restarting.");
     }
   };
@@ -164,13 +177,28 @@ export default function OwnerDashboard() {
       const res = await fetch(`${API_URL}/services`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ name: serviceName, price: Number(servicePrice), durationMinutes: Number(serviceDuration) })
+        // THE FIX: We added the shopId so the database knows where to put this service!
+        body: JSON.stringify({ 
+          shopId: myShop._id, 
+          name: serviceName, 
+          price: Number(servicePrice), 
+          durationMinutes: Number(serviceDuration) 
+        })
       });
+      
       if (res.ok) {
         alert(`${serviceName} added to your menu!`);
         setServiceName(''); setServicePrice(''); setServiceDuration('');
+        fetchMyServices(myShop._id); // Refresh the menu list instantly
+      } else {
+        // THE FIX: Unhid the error so it doesn't fail silently
+        const data = await res.json();
+        alert(data.message || data.error || "Failed to add service. Check backend logs.");
       }
-    } catch (error) { console.error("Error adding service:", error); }
+    } catch (error) { 
+      console.error("Error adding service:", error); 
+      alert("Network Error while adding service.");
+    }
   };
 
   const fetchQueue = async (shopId, authToken) => {
@@ -321,25 +349,51 @@ export default function OwnerDashboard() {
 
       {token && myShop && !isEditingShop && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="col-span-1 bg-white p-6 rounded-xl shadow-md h-fit border border-gray-100">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">Add Service</h2>
-            <div className="mb-3">
-              <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Service Name</label>
-              <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Premium Haircut" />
-            </div>
-            <div className="flex gap-3 mb-5">
-              <div className="w-1/2">
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Price</label>
-                <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="₹" />
+          
+          {/* LEFT COLUMN: Add Service & Current Menu */}
+          <div className="col-span-1 flex flex-col gap-6">
+            {/* ADD SERVICE CARD */}
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">Add Service</h2>
+              <div className="mb-3">
+                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Service Name</label>
+                <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Premium Haircut" />
               </div>
-              <div className="w-1/2">
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Duration</label>
-                <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
+              <div className="flex gap-3 mb-5">
+                <div className="w-1/2">
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Price</label>
+                  <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="₹" />
+                </div>
+                <div className="w-1/2">
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Duration</label>
+                  <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
+                </div>
               </div>
+              <button onClick={handleAddService} className="w-full bg-black text-white py-3 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors shadow-md">Add to Menu</button>
             </div>
-            <button onClick={handleAddService} className="w-full bg-black text-white py-3 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors shadow-md">Add to Menu</button>
+
+            {/* NEW: DISPLAY THE CURRENT MENU */}
+            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">Your Menu</h2>
+              {myServices.length === 0 ? (
+                <p className="text-sm text-gray-500 italic text-center p-4 border rounded bg-gray-50">No services added yet.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {myServices.map(service => (
+                    <div key={service._id} className="flex justify-between items-center border-b pb-2 last:border-0">
+                      <div>
+                        <p className="font-bold text-sm text-gray-800">{service.name}</p>
+                        <p className="text-xs text-gray-500">{service.durationMinutes} mins</p>
+                      </div>
+                      <p className="font-bold text-green-600 text-sm">₹{service.price}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           
+          {/* RIGHT COLUMN: Live Queue */}
           <div className="col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-100">
             <h2 className="text-xl font-bold mb-6 flex items-center justify-between text-gray-800">
               Today's Live Queue 
