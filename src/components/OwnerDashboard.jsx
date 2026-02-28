@@ -75,7 +75,6 @@ export default function OwnerDashboard() {
         setToken(data.token);
         fetchMyShop(data.token);
       } else {
-        // THE FIX: Added 'data.error' so we can see EXACTLY what is failing in the DB
         alert(data.message || data.error || "Authentication failed. Please check your details.");
       }
     } catch (error) { 
@@ -107,8 +106,9 @@ export default function OwnerDashboard() {
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        return alert("Please choose an image smaller than 2MB!");
+      // UPDATED: Allow images up to 5MB so high-quality gallery photos don't fail
+      if (file.size > 5 * 1024 * 1024) {
+        return alert("Please choose an image smaller than 5MB!");
       }
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -135,6 +135,8 @@ export default function OwnerDashboard() {
       }
     } catch (error) { 
       console.error("Error creating shop:", error); 
+      // UPDATED: Added a visible alert so it never fails silently again!
+      alert("Network Error: The image might still be too large, or the backend is restarting.");
     }
   };
 
