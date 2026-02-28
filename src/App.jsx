@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import CustomerView from './components/CustomerView'; 
 import OwnerDashboard from './components/OwnerDashboard'; // <-- We imported the new dashboard!
 
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/customer" element={<CustomerView />} /> 
         <Route path="/owner" element={<OwnerDashboard />} /> {/* <-- Connected the route here! */}
       </Routes>
+      <Analytics />
     </Router>
   );
 }
