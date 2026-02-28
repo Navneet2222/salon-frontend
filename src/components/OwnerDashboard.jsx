@@ -17,7 +17,7 @@ export default function OwnerDashboard() {
   // Shop Data
   const [myShop, setMyShop] = useState(null);
   const [queue, setQueue] = useState([]);
-  const [myServices, setMyServices] = useState([]); // NEW: State to hold the menu items
+  const [myServices, setMyServices] = useState([]); 
   
   // Shop Setup & Edit State
   const [isEditingShop, setIsEditingShop] = useState(false);
@@ -25,7 +25,8 @@ export default function OwnerDashboard() {
   const [shopAddress, setShopAddress] = useState('');
   const [bannerImage, setBannerImage] = useState(''); 
   
-  // Service Data
+  // Service Data & Edit State
+  const [editingServiceId, setEditingServiceId] = useState(null);
   const [serviceName, setServiceName] = useState('');
   const [servicePrice, setServicePrice] = useState('');
   const [serviceDuration, setServiceDuration] = useState('');
@@ -50,9 +51,7 @@ export default function OwnerDashboard() {
   const handleAuth = async (e) => {
     e.preventDefault();
     const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
-    
     const isEmail = phoneOrEmail.includes('@');
-    
     const payload = isLoginMode 
       ? { [isEmail ? 'email' : 'phone']: phoneOrEmail, password } 
       : { 
@@ -95,7 +94,6 @@ export default function OwnerDashboard() {
         setShopAddress(shopData.address);
         setBannerImage(shopData.bannerImage || '');
         
-        // Fetch queue and menu once shop is loaded
         fetchQueue(shopData._id, authToken);
         fetchMyServices(shopData._id); 
         socket.emit('joinShopRoom', shopData._id); 
@@ -105,7 +103,6 @@ export default function OwnerDashboard() {
     }
   };
 
-  // NEW: Function to pull the menu items to display on the dashboard
   const fetchMyServices = async (shopId) => {
     try {
       const res = await fetch(`${API_URL}/services/${shopId}`);
@@ -113,9 +110,7 @@ export default function OwnerDashboard() {
         const data = await res.json();
         setMyServices(data);
       }
-    } catch (error) {
-      console.error("Error fetching services:", error);
-    }
+    } catch (error) { console.error("Error fetching services:", error); }
   };
 
   const handleImageUpload = (e) => {
@@ -133,7 +128,7 @@ export default function OwnerDashboard() {
   };
 
   const handleCreateShop = async () => {
-    if(!shopName || !shopAddress) return alert("Please fill in both the Shop Name and Address.");
+    if(!shopName || !shopAddress) return alert("Please fill in both fields.");
     try {
       const res = await fetch(`${API_URL}/shops`, {
         method: 'POST',
@@ -148,8 +143,7 @@ export default function OwnerDashboard() {
         alert(data.message || data.error || "Failed to create shop.");
       }
     } catch (error) { 
-      console.error("Error creating shop:", error); 
-      alert("Network Error: The image might still be too large, or the backend is restarting.");
+      alert("Network Error: Image might be too large, or backend is restarting.");
     }
   };
 
@@ -171,33 +165,65 @@ export default function OwnerDashboard() {
     } catch (error) { console.error("Error updating shop:", error); }
   };
 
-  const handleAddService = async () => {
+  // NEW: Save Service (Handles both Create and Update)
+  const handleSaveService = async () => {
     if(!serviceName || !servicePrice || !serviceDuration) return alert("Please fill out all service details.");
+    
+    const url = editingServiceId ? `${API_URL}/services/${editingServiceId}` : `${API_URL}/services`;
+    const method = editingServiceId ? 'PUT' : 'POST';
+    const bodyPayload = editingServiceId 
+      ? { name: serviceName, price: Number(servicePrice), durationMinutes: Number(serviceDuration) }
+      : { shopId: myShop._id, name: serviceName, price: Number(servicePrice), durationMinutes: Number(serviceDuration) };
+
     try {
-      const res = await fetch(`${API_URL}/services`, {
-        method: 'POST',
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        // THE FIX: We added the shopId so the database knows where to put this service!
-        body: JSON.stringify({ 
-          shopId: myShop._id, 
-          name: serviceName, 
-          price: Number(servicePrice), 
-          durationMinutes: Number(serviceDuration) 
-        })
+        body: JSON.stringify(bodyPayload)
       });
       
       if (res.ok) {
-        alert(`${serviceName} added to your menu!`);
-        setServiceName(''); setServicePrice(''); setServiceDuration('');
-        fetchMyServices(myShop._id); // Refresh the menu list instantly
+        alert(editingServiceId ? 'Menu updated!' : `${serviceName} added to menu!`);
+        cancelServiceEdit();
+        fetchMyServices(myShop._id);
       } else {
-        // THE FIX: Unhid the error so it doesn't fail silently
         const data = await res.json();
-        alert(data.message || data.error || "Failed to add service. Check backend logs.");
+        alert(data.message || data.error || "Failed to save service.");
       }
     } catch (error) { 
-      console.error("Error adding service:", error); 
-      alert("Network Error while adding service.");
+      console.error("Error saving service:", error); 
+    }
+  };
+
+  // NEW: Populate edit form
+  const handleEditServiceClick = (service) => {
+    setEditingServiceId(service._id);
+    setServiceName(service.name);
+    setServicePrice(service.price);
+    setServiceDuration(service.durationMinutes);
+  };
+
+  // NEW: Cancel edit
+  const cancelServiceEdit = () => {
+    setEditingServiceId(null);
+    setServiceName('');
+    setServicePrice('');
+    setServiceDuration('');
+  };
+
+  // NEW: Delete Service
+  const handleDeleteService = async (serviceId) => {
+    if(!window.confirm("Are you sure you want to delete this service?")) return;
+    try {
+      const res = await fetch(`${API_URL}/services/${serviceId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if(res.ok) {
+        fetchMyServices(myShop._id);
+      }
+    } catch(error) {
+      console.error("Failed to delete", error);
     }
   };
 
@@ -241,6 +267,7 @@ export default function OwnerDashboard() {
         )}
       </header>
 
+      {/* Login & Registration Block (Hidden when logged in) */}
       {!token && (
         <div className="bg-white p-8 rounded-xl shadow-md max-w-md mx-auto border border-gray-200">
           <div className="text-center mb-6">
@@ -249,7 +276,6 @@ export default function OwnerDashboard() {
             </span>
             <h2 className="text-2xl font-bold mt-4 text-gray-800">{isLoginMode ? 'Owner Login' : 'Create Partner Account'}</h2>
           </div>
-          
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             {!isLoginMode && (
               <div>
@@ -265,12 +291,10 @@ export default function OwnerDashboard() {
               <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
               <input type="password" placeholder="Create a secure password" required className="w-full border p-3 rounded-lg bg-gray-50" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
-            
             <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">
               {isLoginMode ? 'Login to Dashboard' : 'Continue to Shop Setup &rarr;'}
             </button>
           </form>
-          
           <p className="mt-6 text-sm text-center text-gray-600 border-t pt-4">
             {isLoginMode ? "Want to register your salon? " : "Already registered your salon? "}
             <span className="text-blue-600 cursor-pointer font-bold hover:underline" onClick={() => setIsLoginMode(!isLoginMode)}>
@@ -280,112 +304,114 @@ export default function OwnerDashboard() {
         </div>
       )}
 
+      {/* Shop Creation Block */}
       {token && !myShop && (
         <div className="bg-white p-8 rounded-xl shadow-xl border-t-4 border-blue-600 mb-8 max-w-lg mx-auto mt-10">
           <div className="text-center mb-6">
-            <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
-              Step 2 of 2
-            </span>
+            <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">Step 2 of 2</span>
             <h2 className="text-2xl font-bold mt-4">Launch Your Storefront</h2>
-            <p className="text-sm text-gray-500 mt-2">Customers need to know where to find you. Upload a premium photo and add your address.</p>
           </div>
-          
           <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
             <label className="block text-sm font-bold text-gray-700 mb-2">Upload Shop Photo (Gallery)</label>
             <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full border p-2 mb-3 rounded bg-white text-sm" />
-            {bannerImage ? (
-              <img src={bannerImage} alt="Preview" className="w-full h-40 object-cover rounded-lg shadow-sm border" />
-            ) : (
-              <div className="w-full h-40 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-sm">
-                No image selected
-              </div>
-            )}
+            {bannerImage && <img src={bannerImage} alt="Preview" className="w-full h-40 object-cover rounded-lg shadow-sm border" />}
           </div>
-
           <div className="mb-4">
             <label className="block text-sm font-bold text-gray-700 mb-1">Official Shop Name</label>
             <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="e.g. Urban Fade Studio" />
           </div>
-
           <div className="mb-8">
             <label className="block text-sm font-bold text-gray-700 mb-1">Full Location Address</label>
             <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="e.g. 123 Main St, Indiranagar, Bangalore" />
           </div>
-
-          <button onClick={handleCreateShop} className="w-full bg-green-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-green-700 shadow-lg flex justify-center items-center gap-2 transition-all hover:scale-[1.02]">
-            <span>Go Live on the Marketplace</span>
-            <span>🚀</span>
+          <button onClick={handleCreateShop} className="w-full bg-green-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-green-700 shadow-lg">
+            Go Live on the Marketplace 🚀
           </button>
         </div>
       )}
 
+      {/* Edit Shop Profile */}
       {token && myShop && isEditingShop && (
         <div className="bg-white p-8 rounded-xl shadow-md mb-8 border border-gray-200">
           <div className="flex justify-between items-center mb-6 border-b pb-4">
             <h2 className="text-xl font-bold text-gray-800">Edit Shop Profile</h2>
             <button onClick={() => setIsEditingShop(false)} className="text-gray-500 font-bold hover:text-gray-800 bg-gray-100 px-3 py-1 rounded-lg">&times; Cancel</button>
           </div>
-          
           <div className="mb-6">
             <label className="block text-sm font-bold text-gray-700 mb-2">Update Shop Photo</label>
             <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full border p-2 mb-2 rounded bg-gray-50 text-sm" />
             {bannerImage && <img src={bannerImage} alt="Preview" className="w-full h-48 object-cover rounded-lg shadow-sm border mt-2" />}
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">Shop Name</label>
-              <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Official Shop Name" />
+              <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">Address</label>
-              <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="Full Address" />
+              <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} />
             </div>
           </div>
-          
           <button onClick={handleUpdateShop} className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-blue-700 shadow-md">Save Changes</button>
         </div>
       )}
 
+      {/* Main Dashboard Panel */}
       {token && myShop && !isEditingShop && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* LEFT COLUMN: Add Service & Current Menu */}
           <div className="col-span-1 flex flex-col gap-6">
-            {/* ADD SERVICE CARD */}
-            <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
-              <h2 className="text-xl font-bold mb-4 text-gray-800">Add Service</h2>
+            {/* Service Form (Add/Edit) */}
+            <div className={`p-6 rounded-xl shadow-md border ${editingServiceId ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100'}`}>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-800">{editingServiceId ? 'Edit Service' : 'Add Service'}</h2>
+                {editingServiceId && (
+                  <button onClick={cancelServiceEdit} className="text-xs text-gray-500 font-bold hover:text-gray-800">Cancel</button>
+                )}
+              </div>
+              
               <div className="mb-3">
                 <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Service Name</label>
-                <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Premium Haircut" />
+                <input className="w-full border p-3 rounded-lg text-sm bg-white" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Premium Haircut" />
               </div>
               <div className="flex gap-3 mb-5">
                 <div className="w-1/2">
                   <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Price</label>
-                  <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="₹" />
+                  <input className="w-full border p-3 rounded-lg text-sm bg-white" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="₹" />
                 </div>
                 <div className="w-1/2">
                   <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Duration</label>
-                  <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
+                  <input className="w-full border p-3 rounded-lg text-sm bg-white" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
                 </div>
               </div>
-              <button onClick={handleAddService} className="w-full bg-black text-white py-3 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors shadow-md">Add to Menu</button>
+              <button 
+                onClick={handleSaveService} 
+                className={`w-full text-white py-3 rounded-lg font-bold text-sm transition-colors shadow-md ${editingServiceId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-black hover:bg-gray-800'}`}
+              >
+                {editingServiceId ? 'Save Updates' : 'Add to Menu'}
+              </button>
             </div>
 
-            {/* NEW: DISPLAY THE CURRENT MENU */}
+            {/* Current Menu List */}
             <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
               <h2 className="text-xl font-bold mb-4 text-gray-800">Your Menu</h2>
               {myServices.length === 0 ? (
                 <p className="text-sm text-gray-500 italic text-center p-4 border rounded bg-gray-50">No services added yet.</p>
               ) : (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                   {myServices.map(service => (
-                    <div key={service._id} className="flex justify-between items-center border-b pb-2 last:border-0">
-                      <div>
-                        <p className="font-bold text-sm text-gray-800">{service.name}</p>
-                        <p className="text-xs text-gray-500">{service.durationMinutes} mins</p>
+                    <div key={service._id} className="flex flex-col border border-gray-100 bg-gray-50 p-3 rounded-lg">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-bold text-sm text-gray-800">{service.name}</p>
+                          <p className="text-xs text-gray-500">{service.durationMinutes} mins</p>
+                        </div>
+                        <p className="font-bold text-green-600 text-sm">₹{service.price}</p>
                       </div>
-                      <p className="font-bold text-green-600 text-sm">₹{service.price}</p>
+                      <div className="flex justify-end gap-2 mt-1">
+                        <button onClick={() => handleEditServiceClick(service)} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold hover:bg-blue-200">Edit</button>
+                        <button onClick={() => handleDeleteService(service._id)} className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-bold hover:bg-red-200">Delete</button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -393,7 +419,7 @@ export default function OwnerDashboard() {
             </div>
           </div>
           
-          {/* RIGHT COLUMN: Live Queue */}
+          {/* Live Queue */}
           <div className="col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-100">
             <h2 className="text-xl font-bold mb-6 flex items-center justify-between text-gray-800">
               Today's Live Queue 
