@@ -49,11 +49,19 @@ export default function OwnerDashboard() {
     e.preventDefault();
     const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
     
-    // Determine if input is email or phone for proper backend handling
+    // Determine if input is email or phone
     const isEmail = phoneOrEmail.includes('@');
+    
+    // THE FIX: Automatically create a placeholder email if they use a phone number
     const payload = isLoginMode 
       ? { [isEmail ? 'email' : 'phone']: phoneOrEmail, password } 
-      : { name, [isEmail ? 'email' : 'phone']: phoneOrEmail, password, role: "shop_owner" };
+      : { 
+          name, 
+          [isEmail ? 'email' : 'phone']: phoneOrEmail, 
+          password, 
+          role: "shop_owner",
+          email: isEmail ? phoneOrEmail : `${phoneOrEmail}@shop.com` 
+        };
 
     try {
       const res = await fetch(`${API_URL}${endpoint}`, {
@@ -83,7 +91,6 @@ export default function OwnerDashboard() {
       if (res.ok) {
         const shopData = await res.json();
         setMyShop(shopData);
-        // Pre-fill states for editing
         setShopName(shopData.name);
         setShopAddress(shopData.address);
         setBannerImage(shopData.bannerImage || '');
@@ -203,7 +210,6 @@ export default function OwnerDashboard() {
         )}
       </header>
 
-      {/* --- PHASE 1: REGISTRATION / LOGIN --- */}
       {!token && (
         <div className="bg-white p-8 rounded-xl shadow-md max-w-md mx-auto border border-gray-200">
           <div className="text-center mb-6">
@@ -243,7 +249,6 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* --- PHASE 2: SHOP SETUP (ONBOARDING) --- */}
       {token && !myShop && (
         <div className="bg-white p-8 rounded-xl shadow-xl border-t-4 border-blue-600 mb-8 max-w-lg mx-auto mt-10">
           <div className="text-center mb-6">
@@ -283,7 +288,6 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* --- EDIT EXISTING SHOP VIEW --- */}
       {token && myShop && isEditingShop && (
         <div className="bg-white p-8 rounded-xl shadow-md mb-8 border border-gray-200">
           <div className="flex justify-between items-center mb-6 border-b pb-4">
@@ -303,73 +307,4 @@ export default function OwnerDashboard() {
               <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="Official Shop Name" />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">Address</label>
-              <input className="w-full border p-3 rounded-lg bg-gray-50" value={shopAddress} onChange={e => setShopAddress(e.target.value)} placeholder="Full Address" />
-            </div>
-          </div>
-          
-          <button onClick={handleUpdateShop} className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-blue-700 shadow-md">Save Changes</button>
-        </div>
-      )}
-
-      {/* --- PHASE 3: MAIN DASHBOARD VIEW --- */}
-      {token && myShop && !isEditingShop && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="col-span-1 bg-white p-6 rounded-xl shadow-md h-fit border border-gray-100">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">Add Service</h2>
-            <div className="mb-3">
-              <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Service Name</label>
-              <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Premium Haircut" />
-            </div>
-            <div className="flex gap-3 mb-5">
-              <div className="w-1/2">
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Price</label>
-                <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} placeholder="₹" />
-              </div>
-              <div className="w-1/2">
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Duration</label>
-                <input className="w-full border p-3 rounded-lg text-sm bg-gray-50" type="number" value={serviceDuration} onChange={e => setServiceDuration(e.target.value)} placeholder="Mins" />
-              </div>
-            </div>
-            <button onClick={handleAddService} className="w-full bg-black text-white py-3 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors shadow-md">Add to Menu</button>
-          </div>
-          
-          <div className="col-span-2 bg-white p-6 rounded-xl shadow-md border border-gray-100">
-            <h2 className="text-xl font-bold mb-6 flex items-center justify-between text-gray-800">
-              Today's Live Queue 
-              <span className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full animate-pulse uppercase tracking-wide font-bold flex items-center gap-1">
-                <span className="w-2 h-2 bg-green-500 rounded-full inline-block"></span> Live
-              </span>
-            </h2>
-            
-            {queue.length === 0 ? (
-              <div className="text-gray-500 italic p-10 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-                <p className="text-lg mb-1">No bookings yet today.</p>
-                <p className="text-sm">Keep your dashboard open to receive live updates.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {queue.map((booking) => (
-                  <div key={booking._id} className="border border-gray-200 p-5 rounded-xl flex justify-between items-center bg-white shadow-sm hover:shadow-md transition-shadow">
-                    <div>
-                      <p className="font-bold text-xl text-gray-900">{booking.timeSlot} <span className="text-base font-normal text-gray-500 ml-1">- {booking.serviceId?.name}</span></p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        <span className="font-semibold">Customer:</span> {booking.customerId?.name} &nbsp;|&nbsp; 
-                        <span className="font-semibold">Paid:</span> <span className="text-green-600">₹{booking.payment?.amount}</span>
-                      </p>
-                      <p className="text-xs mt-2 font-bold text-blue-600 uppercase bg-blue-50 inline-block px-2 py-1 rounded">Status: {booking.status}</p>
-                    </div>
-                    <div className="flex flex-col gap-2 min-w-[120px]">
-                      {booking.status === 'pending' && <button onClick={() => handleUpdateStatus(booking._id, 'in-chair')} className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-yellow-600 transition-colors">Mark "In Chair"</button>}
-                      {booking.status === 'in-chair' && <button onClick={() => handleUpdateStatus(booking._id, 'completed')} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-green-700 transition-colors">Mark "Done"</button>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+              <label className="block text-sm font-bold text-gray-700 mb
